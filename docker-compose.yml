@@ -1,0 +1,15 @@
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      # For local dev against local backend:
+      # NEXT_PUBLIC_API_URL: "http://host.docker.internal:8000"
+      #
+      # For Vercel-style proxy inside the container:
+      # BACKEND_PROXY_URL: "http://YOUR_API_HOST:8000"
+      # NEXT_PUBLIC_API_URL: "/backend-api"
+      NEXT_PUBLIC_API_URL: "http://host.docker.internal:8000"

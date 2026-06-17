@@ -1,0 +1,16 @@
+node_modules
+.next
+.turbo
+.vercel
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.env
+.env.*
+!.env.example
+Dockerfile
+docker-compose.yml
+README.md
+.git
+.gitignore
