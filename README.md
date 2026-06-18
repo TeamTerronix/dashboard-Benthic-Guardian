@@ -2,6 +2,8 @@
 
 IoT dashboard built with Next.js, TypeScript, Tailwind CSS, and map/analytics components.
 
+**Connect to Render API:** see **[CONNECT_BACKEND.md](./CONNECT_BACKEND.md)**.
+
 ## Prerequisites
 
 - Git
