@@ -88,6 +88,35 @@ export async function getPredictions(minRisk = 0, limit = 500) {
   return fetchAPI(`/api/predictions?min_risk=${minRisk}&limit=${limit}`);
 }
 
+/** ANN–LSTM 60d history → +1/+3/+7 day SST/DHW forecast for a reef site */
+export interface LSTMForecastPoint {
+  model: string;
+  location: string;
+  issue_time: string;
+  horizon_days: number;
+  target_date: string;
+  sst_issue: number;
+  dhw_issue: number;
+  predicted_temp: number;
+  sst_pred: number;
+  dhw_pred: number;
+  sst_persist: number;
+  baseline_month_sst: number;
+  anomaly: number;
+  risk_score: number;
+  risk_level: number;
+  risk_name: string;
+}
+
+export async function getLSTMForecast(
+  location = 'hikkaduwa',
+  asOf?: string,
+): Promise<LSTMForecastPoint[]> {
+  const params = new URLSearchParams({ location });
+  if (asOf) params.set('as_of', asOf);
+  return fetchAPI(`/api/lstm-forecast?${params}`);
+}
+
 export async function getTrainingHistory() {
   return fetchAPI('/api/training-history');
 }
