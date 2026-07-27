@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import { tempToColor } from '@/lib/utils';
 import type { PredictionPoint, ForecastData } from '@/lib/types';
-import { getDHW, getLatestReadings, getPredictions, getSST, mapLatestReadingRow } from '@/lib/api';
+import { getDHW, getLatestReadings, getLSTMForecast, getPredictions, getSST, mapLatestReadingRow } from '@/lib/api';
 import { nearestAreaId } from '@/lib/geo';
 import { useMonitoringAreas } from '@/lib/useMonitoringAreas';
 import { subscribeDashboardDataRefresh } from '@/lib/data-refresh';
@@ -37,15 +37,9 @@ export default function PredictionsPage() {
     let cancelled = false;
     (async () => {
       try {
-        const [sst, preds] = await Promise.all([
-          getSST(undefined, undefined, 5000),
-          getPredictions(0, 5000),
-        ]);
-
+        const sst = await getSST(undefined, undefined, 5000);
         const anySst = sst as any;
         const sstRows = (Array.isArray(anySst?.value) ? anySst.value : anySst) as any[];
-        const anyPreds = preds as any;
-        const predRows = (Array.isArray(anyPreds?.value) ? anyPreds.value : anyPreds) as any[];
 
         // Historical: daily mean of actual temperatures (last 7 days)
         const histAgg: Record<string, { sum: number; n: number }> = {};
@@ -65,29 +59,88 @@ export default function PredictionsPage() {
           return { time: d, actual: Number(mean.toFixed(2)) };
         });
 
-        // Forecast: daily mean of predicted temps for the next horizonDays
-        const predAgg: Record<string, { sum: number; n: number }> = {};
-        for (const p of predRows) {
-          const day = String(p.target_timestamp).slice(0, 10);
-          if (!predAgg[day]) predAgg[day] = { sum: 0, n: 0 };
-          const t = Number(p.predicted_temp);
-          if (Number.isFinite(t)) {
-            predAgg[day].sum += t;
-            predAgg[day].n += 1;
+        let forecast: ForecastData[] = [];
+
+        if (model === 'LSTM' || model === 'Ensemble') {
+          // ANN–LSTM: fixed horizons +1 / +3 / +7 days from 60-day history
+          const lstm = await getLSTMForecast('hikkaduwa');
+          const ci = confidence === 95 ? 0.5 : 0.35;
+          const lstmPoints = lstm
+            .filter((p) => p.horizon_days <= horizonDays || horizonDays >= 7)
+            .map((p) => {
+              const mean = Number(p.predicted_temp);
+              return {
+                time: String(p.target_date).slice(0, 10),
+                predicted: Number(mean.toFixed(2)),
+                upperBound: Number((mean + ci).toFixed(2)),
+                lowerBound: Number((mean - ci).toFixed(2)),
+              };
+            });
+
+          if (model === 'LSTM') {
+            forecast = lstmPoints;
+          } else {
+            // Ensemble: blend PINN daily means with LSTM horizons when dates match
+            const preds = await getPredictions(0, 5000);
+            const anyPreds = preds as any;
+            const predRows = (Array.isArray(anyPreds?.value) ? anyPreds.value : anyPreds) as any[];
+            const predAgg: Record<string, { sum: number; n: number }> = {};
+            for (const p of predRows) {
+              const day = String(p.target_timestamp).slice(0, 10);
+              if (!predAgg[day]) predAgg[day] = { sum: 0, n: 0 };
+              const t = Number(p.predicted_temp);
+              if (Number.isFinite(t)) {
+                predAgg[day].sum += t;
+                predAgg[day].n += 1;
+              }
+            }
+            const lstmByDay = Object.fromEntries(lstmPoints.map((p) => [p.time, p.predicted]));
+            const days = Object.keys({ ...predAgg, ...lstmByDay }).sort().slice(0, horizonDays + 7);
+            forecast = days.slice(-horizonDays).map((d) => {
+              const pinn = predAgg[d]?.n ? predAgg[d].sum / predAgg[d].n : null;
+              const lstmV = lstmByDay[d] ?? null;
+              const mean =
+                pinn != null && lstmV != null
+                  ? (pinn + lstmV) / 2
+                  : pinn != null
+                    ? pinn
+                    : lstmV ?? 0;
+              return {
+                time: d,
+                predicted: Number(mean.toFixed(2)),
+                upperBound: Number((mean + ci).toFixed(2)),
+                lowerBound: Number((mean - ci).toFixed(2)),
+              };
+            });
           }
-        }
-        const futureDays = Object.keys(predAgg).sort().slice(0, horizonDays + 7);
-        const forecast = futureDays.slice(-horizonDays).map((d) => {
-          const a = predAgg[d];
-          const mean = a.n ? a.sum / a.n : 0;
+        } else {
+          // PINN: daily mean of stored 168-h predictions
+          const preds = await getPredictions(0, 5000);
+          const anyPreds = preds as any;
+          const predRows = (Array.isArray(anyPreds?.value) ? anyPreds.value : anyPreds) as any[];
+          const predAgg: Record<string, { sum: number; n: number }> = {};
+          for (const p of predRows) {
+            const day = String(p.target_timestamp).slice(0, 10);
+            if (!predAgg[day]) predAgg[day] = { sum: 0, n: 0 };
+            const t = Number(p.predicted_temp);
+            if (Number.isFinite(t)) {
+              predAgg[day].sum += t;
+              predAgg[day].n += 1;
+            }
+          }
+          const futureDays = Object.keys(predAgg).sort().slice(0, horizonDays + 7);
           const ci = confidence === 95 ? 0.6 : 0.45;
-          return {
-            time: d,
-            predicted: Number(mean.toFixed(2)),
-            upperBound: Number((mean + ci).toFixed(2)),
-            lowerBound: Number((mean - ci).toFixed(2)),
-          };
-        });
+          forecast = futureDays.slice(-horizonDays).map((d) => {
+            const a = predAgg[d];
+            const mean = a.n ? a.sum / a.n : 0;
+            return {
+              time: d,
+              predicted: Number(mean.toFixed(2)),
+              upperBound: Number((mean + ci).toFixed(2)),
+              lowerBound: Number((mean - ci).toFixed(2)),
+            };
+          });
+        }
 
         const merged: ForecastData[] = [
           ...historical.map((h) => ({
@@ -108,7 +161,7 @@ export default function PredictionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [horizonDays, confidence, dataRefreshTick]);
+  }, [horizonDays, confidence, dataRefreshTick, model]);
 
   useEffect(() => {
     setMounted(true);
