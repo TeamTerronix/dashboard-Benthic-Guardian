@@ -85,8 +85,9 @@ export async function getDHW(start?: string, end?: string, limit = 1000) {
   return fetchAPI(`/api/dhw?${params}`);
 }
 
-export async function getPredictions(minRisk = 0, limit = 500) {
-  return fetchAPI(`/api/predictions?min_risk=${minRisk}&limit=${limit}`);
+export async function getPredictions(minRisk = 0, limit = 5000) {
+  const capped = Math.min(Math.max(1, limit), 5000);
+  return fetchAPI(`/api/predictions?min_risk=${minRisk}&limit=${capped}`);
 }
 
 /** ANN–LSTM 60d history → +1/+3/+7 day SST/DHW forecast for a reef site */
