@@ -1,10 +1,11 @@
 /**
- * SLIOT API Client
+ * Benthic Guardian API Client
  * Connects the Next.js dashboard to the FastAPI backend.
  */
 
 import type { TemperatureReading } from './types';
 import { API_BASE } from './api-base';
+import { TOKEN_STORAGE_KEY } from './auth';
 
 async function fetchAPI<T>(endpoint: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
@@ -12,7 +13,7 @@ async function fetchAPI<T>(endpoint: string, init?: RequestInit): Promise<T> {
     ...(init?.headers as Record<string, string>),
   };
   if (typeof window !== 'undefined') {
-    const tok = localStorage.getItem('sliot_token');
+    const tok = localStorage.getItem(TOKEN_STORAGE_KEY);
     if (tok) headers.Authorization = `Bearer ${tok}`;
   }
   if (init?.body && typeof init.body === 'string' && !headers['Content-Type']) {
@@ -23,7 +24,7 @@ async function fetchAPI<T>(endpoint: string, init?: RequestInit): Promise<T> {
     headers,
   });
   if (res.status === 401 && typeof window !== 'undefined') {
-    localStorage.removeItem('sliot_token');
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
     window.location.href = '/login';
     throw new Error('Unauthorized');
   }

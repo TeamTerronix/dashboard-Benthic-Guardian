@@ -2,7 +2,7 @@
  * Browser event fired when the API pushes new sensor data (WebSocket `reading_new`)
  * or bleaching alerts. Components refetch API data when this fires.
  */
-export const DASHBOARD_DATA_REFRESH = 'sliot-dashboard-data-refresh';
+export const DASHBOARD_DATA_REFRESH = 'bg-dashboard-data-refresh';
 
 export function dispatchDashboardDataRefresh(): void {
   if (typeof window === 'undefined') return;

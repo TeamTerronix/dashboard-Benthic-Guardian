@@ -71,14 +71,9 @@ export default function Sidebar() {
       <div className="flex items-center gap-3 px-4 h-16 border-b" style={{ borderColor: 'var(--border)' }}>
         <BenthicIcon size={28} className="shrink-0" />
         {!sidebarCollapsed && (
-          <div className="min-w-0 leading-tight">
-            <span className="block font-semibold text-sm tracking-wide" style={{ color: 'var(--accent-cyan)' }}>
-              Benthic Guardian
-            </span>
-            <span className="block text-[10px]" style={{ color: 'var(--text-secondary)' }}>
-              SLIOT
-            </span>
-          </div>
+          <span className="font-semibold text-sm tracking-wide truncate" style={{ color: 'var(--accent-cyan)' }}>
+            Benthic Guardian
+          </span>
         )}
       </div>
 

@@ -1,4 +1,4 @@
-// Types for the SLIOT Dashboard
+// Types for the Benthic Guardian dashboard
 
 export interface SensorNode {
   id: string;
