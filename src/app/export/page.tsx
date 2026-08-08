@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Download, FileSpreadsheet, FileJson, FileText, FileType } from 'lucide-react';
+import { useDashboardStore } from '@/lib/store';
 
 type Format = 'csv' | 'json' | 'netcdf' | 'pdf';
 
@@ -23,10 +24,11 @@ const formatInfo: Record<Format, { icon: typeof FileSpreadsheet; label: string; 
 };
 
 export default function ExportPage() {
+  const dateRange = useDashboardStore((s) => s.dateRange);
   const [config, setConfig] = useState<ExportConfig>({
     format: 'csv',
-    dateFrom: '2026-01-26',
-    dateTo: '2026-02-25',
+    dateFrom: dateRange.from,
+    dateTo: dateRange.to,
     includeSST: true,
     includeDHW: true,
     includePredictions: false,

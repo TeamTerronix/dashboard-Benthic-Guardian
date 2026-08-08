@@ -9,6 +9,7 @@ import { useMonitoringAreas } from '@/lib/useMonitoringAreas';
 import type { SensorNode, TemperatureReading } from '@/lib/types';
 import { deriveNodeStatusFromAgeMinutes } from '@/lib/node-status';
 import { subscribeDashboardDataRefresh } from '@/lib/data-refresh';
+import { useDashboardStore } from '@/lib/store';
 
 const mapLoader = (
   <div
@@ -32,11 +33,12 @@ const DeckMap = dynamic(() => import('@/components/map/DeckMap'), {
 
 export default function MapPage() {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [areaDropdownOpen, setAreaDropdownOpen] = useState(false);
   const [mapMode, setMapMode] = useState<'2d' | '3d'>('2d');
 
   const { areas, loading: areasLoading } = useMonitoringAreas();
+  const { selectedNetworkId, setSelectedNetworkId, setLastDataUpdatedAt } = useDashboardStore();
+  const selectedArea = selectedNetworkId;
   const [latestReadings, setLatestReadings] = useState<TemperatureReading[]>([]);
 
   useEffect(() => {
@@ -47,7 +49,10 @@ export default function MapPage() {
         const anyLatest = latest as any;
         const rows = (Array.isArray(anyLatest?.value) ? anyLatest.value : anyLatest) as any[];
         const mapped: TemperatureReading[] = rows.map((r) => mapLatestReadingRow(r));
-        if (!cancelled) setLatestReadings(mapped);
+        if (!cancelled) {
+          setLatestReadings(mapped);
+          setLastDataUpdatedAt(new Date().toISOString());
+        }
       } catch {
         if (!cancelled) setLatestReadings([]);
       }
@@ -58,7 +63,7 @@ export default function MapPage() {
       cancelled = true;
       unsub();
     };
-  }, []);
+  }, [setLastDataUpdatedAt]);
 
   const nodes: SensorNode[] = useMemo(() => {
     // Build nodes from latest readings. Some UI fields are derived (no mock).
@@ -145,7 +150,7 @@ export default function MapPage() {
                 style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
               >
                 <button
-                  onClick={() => { setSelectedArea(null); setSelectedNode(null); setAreaDropdownOpen(false); }}
+                  onClick={() => { setSelectedNetworkId(null); setSelectedNode(null); setAreaDropdownOpen(false); }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left cursor-pointer transition-colors"
                   style={{
                     background: selectedArea === null ? 'rgba(0, 229, 255, 0.08)' : 'transparent',
@@ -166,7 +171,7 @@ export default function MapPage() {
                   return (
                     <button
                       key={a.id}
-                      onClick={() => { setSelectedArea(a.id); setSelectedNode(null); setAreaDropdownOpen(false); }}
+                      onClick={() => { setSelectedNetworkId(a.id); setSelectedNode(null); setAreaDropdownOpen(false); }}
                       className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left cursor-pointer transition-colors"
                       style={{
                         background: selectedArea === a.id ? 'rgba(0, 229, 255, 0.08)' : 'transparent',
@@ -232,7 +237,7 @@ export default function MapPage() {
               selectedNode={selectedNode}
               onSelectNode={setSelectedNode}
               selectedArea={selectedArea}
-              onSelectArea={(id) => { setSelectedArea(id); setSelectedNode(null); }}
+              onSelectArea={(id) => { setSelectedNetworkId(id); setSelectedNode(null); }}
               showHeatmap={true}
             />
           ) : (
@@ -305,7 +310,7 @@ export default function MapPage() {
                 return (
                   <button
                     key={a.id}
-                    onClick={() => { setSelectedArea(a.id); setSelectedNode(null); }}
+                    onClick={() => { setSelectedNetworkId(a.id); setSelectedNode(null); }}
                     className="w-full flex items-center gap-3 p-2.5 rounded-lg border text-left cursor-pointer transition-colors"
                     style={{
                       background: 'var(--bg-elevated)',

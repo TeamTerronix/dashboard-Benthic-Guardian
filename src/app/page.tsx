@@ -16,12 +16,17 @@ import { deriveNodeStatusFromAgeMinutes } from '@/lib/node-status';
 import { subscribeDashboardDataRefresh } from '@/lib/data-refresh';
 
 export default function DashboardPage() {
-  const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const { areas, loading: areasLoading } = useMonitoringAreas();
+  const {
+    setAvailableNodes,
+    selectedNetworkId,
+    setSelectedNetworkId,
+    setLastDataUpdatedAt,
+  } = useDashboardStore();
+  const selectedArea = selectedNetworkId;
   const currentArea = areas.find((a) => a.id === selectedArea);
-  const { setAvailableNodes } = useDashboardStore();
 
   const [latestReadings, setLatestReadings] = useState<TemperatureReading[]>([]);
   const [stats, setStats] = useState<StatsApiResponse | null>(null);
@@ -38,6 +43,7 @@ export default function DashboardPage() {
           setLatestReadings(mapped);
           setAvailableNodes(mapped.map((m) => m.nodeId));
           setStats(st);
+          setLastDataUpdatedAt(new Date().toISOString());
         }
       } catch {
         if (!cancelled) {
@@ -52,7 +58,7 @@ export default function DashboardPage() {
       cancelled = true;
       unsub();
     };
-  }, [setAvailableNodes]);
+  }, [setAvailableNodes, setLastDataUpdatedAt]);
 
   const sensorNodes: SensorNode[] = useMemo(() => {
     return latestReadings.map((r) => {
@@ -197,7 +203,7 @@ export default function DashboardPage() {
               style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
             >
               <button
-                onClick={() => { setSelectedArea(null); setDropdownOpen(false); }}
+                onClick={() => { setSelectedNetworkId(null); setDropdownOpen(false); }}
                 className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left cursor-pointer transition-colors"
                 style={{
                   background: selectedArea === null ? 'rgba(0, 229, 255, 0.08)' : 'transparent',
@@ -226,7 +232,7 @@ export default function DashboardPage() {
                 return (
                   <button
                     key={a.id}
-                    onClick={() => { setSelectedArea(a.id); setDropdownOpen(false); }}
+                    onClick={() => { setSelectedNetworkId(a.id); setDropdownOpen(false); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left cursor-pointer transition-colors"
                     style={{
                       background: selectedArea === a.id ? 'rgba(0, 229, 255, 0.08)' : 'transparent',
@@ -350,7 +356,7 @@ export default function DashboardPage() {
                 {areaCards.map(({ area, info }) => (
                   <button
                     key={area.id}
-                    onClick={() => setSelectedArea(area.id)}
+                    onClick={() => setSelectedNetworkId(area.id)}
                     className="flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-pointer text-left"
                     style={{
                       background: 'var(--bg-elevated)',
