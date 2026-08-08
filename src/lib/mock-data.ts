@@ -1,4 +1,4 @@
-// Mock data generator for SLIOT Dashboard
+// Mock data generator for the Benthic Guardian dashboard
 // In production, this would be replaced with actual API calls
 
 import type {

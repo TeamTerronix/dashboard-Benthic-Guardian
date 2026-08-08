@@ -9,12 +9,22 @@ import type { NetworkGroupInfo } from '@/lib/api';
 
 const FALLBACK_PALETTE = ['#00E5FF', '#FF6B6B', '#FFD93D', '#6BCB77', '#A78BFA', '#F472B6'];
 
-/** e.g. ng_bar-reef_01 → bar-reef when that static area exists */
+/** e.g. ng_bar-reef_01 → bar-reef; ng_hikkaduwa_sea_01 → hikkaduwa */
 export function matchStaticAreaIdFromNetworkGroupId(ngId: string): string | null {
   const m = /^ng_(.+)_\d+$/.exec(ngId);
   if (!m) return null;
   const key = m[1];
-  return staticAreas.some((a) => a.id === key) ? key : null;
+  const exact = staticAreas.find((a) => a.id === key);
+  if (exact) return exact.id;
+  // Prefix / contains match: ng_hikkaduwa_sea_01 → hikkaduwa, ng_trinco_sea_01 → pigeon-island or trinco
+  const byPrefix = staticAreas.find(
+    (a) => key === a.id || key.startsWith(`${a.id}_`) || key.startsWith(a.id),
+  );
+  if (byPrefix) return byPrefix.id;
+  if (key.includes('trinco') || key.includes('pigeon')) {
+    return staticAreas.find((a) => a.id === 'pigeon-island')?.id ?? null;
+  }
+  return null;
 }
 
 export function buildMonitoringAreasFromNetworkGroups(groups: NetworkGroupInfo[]): MonitoringArea[] {

@@ -1,4 +1,4 @@
-// Utility functions for the SLIOT Dashboard
+// Utility functions for the Benthic Guardian dashboard
 
 import { clsx, type ClassValue } from 'clsx';
 

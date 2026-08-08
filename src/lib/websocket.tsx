@@ -18,6 +18,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import useWebSocket, { ReadyState } from 'react-use-websocket';
 import { toast } from 'sonner';
+import { TOKEN_STORAGE_KEY } from '@/lib/auth';
 
 import { getBleachingAlertsWebSocketUrl } from './api-base';
 import { dispatchDashboardDataRefresh } from './data-refresh';
@@ -92,7 +93,7 @@ export function AlertWebSocket() {
   const setWsConnected = useDashboardStore((s) => s.setWsConnected);
 
   useEffect(() => {
-    setToken(localStorage.getItem('sliot_token'));
+    setToken(localStorage.getItem(TOKEN_STORAGE_KEY));
     return () => setWsConnected(false);
   }, [setWsConnected]);
 

@@ -1,8 +1,8 @@
 import { API_BASE } from './api-base';
 
-export const TOKEN_STORAGE_KEY = 'sliot_token';
+export const TOKEN_STORAGE_KEY = 'bg_token';
 
-const AUTH_EVENT = 'sliot-auth';
+const AUTH_EVENT = 'bg-auth';
 
 /** Same-tab listeners (e.g. AuthShell) refresh after login/logout. */
 function notifyAuthChanged() {

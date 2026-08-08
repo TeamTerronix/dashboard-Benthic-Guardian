@@ -8,6 +8,8 @@ export default function SettingsPage() {
   const {
     unit,
     toggleUnit,
+    theme,
+    setTheme,
     refreshIntervalSec,
     thresholdWarningC,
     thresholdCriticalC,
@@ -51,6 +53,37 @@ export default function SettingsPage() {
           >
             {unit === 'celsius' ? '°C → °F' : '°F → °C'}
           </button>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm" style={{ color: 'var(--text-primary)' }}>Appearance</div>
+            <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>Switch between dark and light mode</div>
+          </div>
+          <div className="flex rounded-lg overflow-hidden border" style={{ borderColor: 'var(--border)' }}>
+            <button
+              type="button"
+              onClick={() => setTheme('dark')}
+              className="px-3 py-1.5 text-xs font-medium cursor-pointer"
+              style={{
+                background: theme === 'dark' ? 'var(--accent-cyan)' : 'var(--bg-elevated)',
+                color: theme === 'dark' ? 'var(--bg-primary)' : 'var(--text-secondary)',
+              }}
+            >
+              Dark
+            </button>
+            <button
+              type="button"
+              onClick={() => setTheme('light')}
+              className="px-3 py-1.5 text-xs font-medium cursor-pointer"
+              style={{
+                background: theme === 'light' ? 'var(--accent-cyan)' : 'var(--bg-elevated)',
+                color: theme === 'light' ? '#FFFFFF' : 'var(--text-secondary)',
+              }}
+            >
+              Light
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center justify-between">
