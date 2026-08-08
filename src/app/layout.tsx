@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import AuthShell from "@/components/auth/AuthShell";
+import ThemeProvider from "@/components/theme/ThemeProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,9 +16,31 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SLIOT — Underwater Temperature Monitoring Dashboard",
-  description: "Station-Side Monitoring Front-End for Marine Biologists and Environmental Researchers",
+  title: "Benthic Guardian — Coral Reef Monitoring",
+  description: "Station-side monitoring for marine biologists and environmental researchers",
 };
+
+/** Avoid flash of wrong theme before Zustand rehydrates. */
+const themeInitScript = `
+(function(){
+  try {
+    var raw = localStorage.getItem('bg_dashboard_store');
+    var theme = 'dark';
+    if (raw) {
+      var parsed = JSON.parse(raw);
+      if (parsed && parsed.state && (parsed.state.theme === 'light' || parsed.state.theme === 'dark')) {
+        theme = parsed.state.theme;
+      }
+    }
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'dark') document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+  } catch (e) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.documentElement.classList.add('dark');
+  }
+})();
+`;
 
 export default function RootLayout({
   children,
@@ -25,9 +48,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {/* Global toast container */}
         <Toaster
           position="top-right"
           richColors
@@ -42,7 +67,9 @@ export default function RootLayout({
           }}
         />
 
-        <AuthShell>{children}</AuthShell>
+        <ThemeProvider>
+          <AuthShell>{children}</AuthShell>
+        </ThemeProvider>
       </body>
     </html>
   );

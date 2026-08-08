@@ -1,13 +1,13 @@
 'use client';
 
 import { useDashboardStore } from '@/lib/store';
-import { Bell, Thermometer, Calendar, RefreshCw, LogIn, LogOut } from 'lucide-react';
+import { Bell, Thermometer, Calendar, RefreshCw, LogIn, LogOut, Sun, Moon } from 'lucide-react';
 import Link from 'next/link';
 import { clearToken, getToken } from '@/lib/auth';
 import { useEffect, useState } from 'react';
 
 export default function TopBar() {
-  const { dateRange, setDateRange, unit, toggleUnit } = useDashboardStore();
+  const { dateRange, setDateRange, unit, toggleUnit, theme, toggleTheme } = useDashboardStore();
   const activeAlerts = 0;
   const [hasToken, setHasToken] = useState(false);
 
@@ -54,7 +54,6 @@ export default function TopBar() {
 
       {/* Right: Controls */}
       <div className="flex items-center gap-3">
-        {/* Auth */}
         {hasToken ? (
           <button
             onClick={() => {
@@ -81,7 +80,6 @@ export default function TopBar() {
           </Link>
         )}
 
-        {/* Live indicator */}
         <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
           <span className="relative flex h-2 w-2">
             <span
@@ -93,7 +91,16 @@ export default function TopBar() {
           Last updated 3m ago
         </div>
 
-        {/* Unit toggle */}
+        <button
+          onClick={toggleTheme}
+          className="p-1.5 rounded cursor-pointer transition-colors hover:bg-[var(--bg-elevated)]"
+          style={{ color: 'var(--text-secondary)' }}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+        </button>
+
         <button
           onClick={toggleUnit}
           className="flex items-center gap-1 px-2 py-1 rounded text-xs font-mono cursor-pointer transition-colors hover:bg-[var(--bg-elevated)]"
@@ -103,7 +110,6 @@ export default function TopBar() {
           {unit === 'celsius' ? '°C' : '°F'}
         </button>
 
-        {/* Refresh */}
         <button
           className="p-1.5 rounded cursor-pointer transition-colors hover:bg-[var(--bg-elevated)]"
           style={{ color: 'var(--text-secondary)' }}
@@ -111,7 +117,6 @@ export default function TopBar() {
           <RefreshCw className="w-4 h-4" />
         </button>
 
-        {/* Alerts bell */}
         <button
           className="relative p-1.5 rounded cursor-pointer transition-colors hover:bg-[var(--bg-elevated)]"
           style={{ color: 'var(--text-secondary)' }}

@@ -27,6 +27,11 @@ interface DashboardState {
   unit: 'celsius' | 'fahrenheit';
   toggleUnit: () => void;
 
+  // Theme
+  theme: 'dark' | 'light';
+  setTheme: (theme: 'dark' | 'light') => void;
+  toggleTheme: () => void;
+
   // Settings (persisted)
   refreshIntervalSec: number;      // auto-refresh polling interval
   thresholdWarningC: number;       // chart warning threshold (°C)
@@ -95,6 +100,10 @@ export const useDashboardStore = create<DashboardState>()(
       unit: 'celsius',
       toggleUnit: () => set((s) => ({ unit: s.unit === 'celsius' ? 'fahrenheit' : 'celsius' })),
 
+      theme: 'dark',
+      setTheme: (theme) => set({ theme }),
+      toggleTheme: () => set((s) => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
+
       refreshIntervalSec: DEFAULT_SETTINGS.refreshIntervalSec,
       thresholdWarningC: DEFAULT_SETTINGS.thresholdWarningC,
       thresholdCriticalC: DEFAULT_SETTINGS.thresholdCriticalC,
@@ -107,9 +116,10 @@ export const useDashboardStore = create<DashboardState>()(
       setActivePage: (page) => set({ activePage: page }),
     }),
     {
-      name: 'sliot_dashboard_store',
+      name: 'bg_dashboard_store',
       partialize: (s) => ({
         unit: s.unit,
+        theme: s.theme,
         refreshIntervalSec: s.refreshIntervalSec,
         thresholdWarningC: s.thresholdWarningC,
         thresholdCriticalC: s.thresholdCriticalC,

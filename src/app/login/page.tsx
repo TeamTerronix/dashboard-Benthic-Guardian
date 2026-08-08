@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Moon, Sun } from 'lucide-react';
 import BenthicIcon from '@/components/brand/BenthicIcon';
 import { loginWithPassword, setToken, clearToken, getToken, subscribeAuthChanged } from '@/lib/auth';
+import { useDashboardStore } from '@/lib/store';
 
 const devDefaults =
   process.env.NODE_ENV === 'development'
@@ -13,6 +14,7 @@ const devDefaults =
 
 export default function LoginPage() {
   const router = useRouter();
+  const { theme, toggleTheme } = useDashboardStore();
   const [email, setEmail] = useState(devDefaults.email);
   const [password, setPassword] = useState(devDefaults.password);
   const [showPassword, setShowPassword] = useState(false);
@@ -54,12 +56,27 @@ export default function LoginPage() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center px-4 py-10"
+      className="relative min-h-screen flex items-center justify-center px-4 py-10"
       style={{
         background:
-          'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(0, 229, 255, 0.08), transparent 55%), var(--bg-primary)',
+          'radial-gradient(ellipse 80% 60% at 50% -10%, color-mix(in srgb, var(--accent-cyan) 12%, transparent), transparent 55%), var(--bg-primary)',
       }}
     >
+      <button
+        type="button"
+        onClick={toggleTheme}
+        className="absolute top-4 right-4 p-2 rounded-lg border cursor-pointer"
+        style={{
+          background: 'var(--bg-surface)',
+          borderColor: 'var(--border)',
+          color: 'var(--text-secondary)',
+        }}
+        title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      >
+        {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+      </button>
+
       <div className="w-full max-w-md">
         {/* Brand */}
         <div className="mb-8 text-center">
@@ -216,7 +233,7 @@ export default function LoginPage() {
         </div>
 
         <p className="mt-6 text-center text-xs" style={{ color: 'var(--text-secondary)' }}>
-          Team Terronix · SLIOT
+          Team Terronix
         </p>
       </div>
     </div>
