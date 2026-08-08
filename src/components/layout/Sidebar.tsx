@@ -16,10 +16,10 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Waves,
   ShieldCheck,
   UserCog,
 } from 'lucide-react';
+import BenthicIcon from '@/components/brand/BenthicIcon';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -69,11 +69,16 @@ export default function Sidebar() {
     >
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 h-16 border-b" style={{ borderColor: 'var(--border)' }}>
-        <Waves className="w-7 h-7 shrink-0" style={{ color: 'var(--accent-cyan)' }} />
+        <BenthicIcon size={28} className="shrink-0" />
         {!sidebarCollapsed && (
-          <span className="font-bold text-lg tracking-wide" style={{ color: 'var(--accent-cyan)' }}>
-            SLIOT
-          </span>
+          <div className="min-w-0 leading-tight">
+            <span className="block font-semibold text-sm tracking-wide" style={{ color: 'var(--accent-cyan)' }}>
+              Benthic Guardian
+            </span>
+            <span className="block text-[10px]" style={{ color: 'var(--text-secondary)' }}>
+              SLIOT
+            </span>
+          </div>
         )}
       </div>
 
