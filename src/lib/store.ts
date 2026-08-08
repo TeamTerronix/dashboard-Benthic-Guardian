@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { Alert } from './types';
 
 interface DashboardState {
   // Sidebar
@@ -38,6 +39,15 @@ interface DashboardState {
   // Active page
   activePage: string;
   setActivePage: (page: string) => void;
+
+  // Alerts
+  alerts: Alert[];
+  addAlert: (alert: Alert) => void;
+  acknowledgeAlert: (id: string) => void;
+  clearAlerts: () => void;
+
+  wsConnected: boolean;
+  setWsConnected: (connected: boolean) => void;
 }
 
 const DEFAULT_SETTINGS = {
@@ -49,6 +59,15 @@ const DEFAULT_SETTINGS = {
 export const useDashboardStore = create<DashboardState>()(
   persist(
     (set) => ({
+      alerts: [],
+      addAlert: (alert) => set((s) => ({ alerts: [alert, ...s.alerts].slice(0, 50) })),
+      acknowledgeAlert: (id) =>
+        set((s) => ({ alerts: s.alerts.map((a) => (a.id === id ? { ...a, acknowledged: true } : a)) })),
+      clearAlerts: () => set({ alerts: [] }),
+
+      wsConnected: false,
+      setWsConnected: (connected) => set({ wsConnected: connected }),
+      
       sidebarCollapsed: false,
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 
