@@ -3,7 +3,7 @@
  * Connects the Next.js dashboard to the FastAPI backend.
  */
 
-import type { TemperatureReading } from './types';
+import type { Alert, TemperatureReading } from './types';
 import { API_BASE } from './api-base';
 import { TOKEN_STORAGE_KEY } from './auth';
 
@@ -226,5 +226,106 @@ export async function adminRegisterSensor(payload: {
       depth: payload.depth,
       network_group_id: payload.network_group_id ?? null,
     }),
+  });
+}
+
+export interface AlertApiResponse {
+  id: number;
+  type: 'critical' | 'warning' | 'info';
+  status: 'open' | 'acknowledged' | 'resolved';
+  sensor_id: number | null;
+  sensor_uid: string | null;
+  network_group_id: string | null;
+  message: string;
+  temperature: number | null;
+  risk_level: number | null;
+  assigned_to_id: number | null;
+  assigned_to_email: string | null;
+  acknowledged_by_email: string | null;
+  acknowledged_at: string | null;
+  resolved_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export function mapPersistedAlert(item: AlertApiResponse): Alert {
+  return {
+    id: String(item.id),
+    type: item.status === 'resolved' ? 'resolved' : item.type,
+    nodeId: item.sensor_uid ?? 'System',
+    message: item.message,
+    temperature: item.temperature ?? undefined,
+    timestamp: item.created_at,
+    acknowledged: item.status !== 'open',
+    status: item.status,
+    sensorId: item.sensor_id,
+    networkGroupId: item.network_group_id,
+    riskLevel: item.risk_level,
+    assignedToId: item.assigned_to_id,
+    assignedToEmail: item.assigned_to_email,
+    acknowledgedByEmail: item.acknowledged_by_email,
+    acknowledgedAt: item.acknowledged_at,
+    resolvedAt: item.resolved_at,
+    notes: item.notes,
+  };
+}
+
+export async function getAlerts(filters?: {
+  status?: 'open' | 'acknowledged' | 'resolved' | '';
+  type?: 'critical' | 'warning' | 'info' | '';
+  assignedToId?: number | null;
+  limit?: number;
+}): Promise<AlertApiResponse[]> {
+  const params = new URLSearchParams();
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.type) params.set('type', filters.type);
+  if (filters?.assignedToId != null) params.set('assigned_to_id', String(filters.assignedToId));
+  params.set('limit', String(filters?.limit ?? 200));
+  return fetchAPI(`/api/alerts?${params}`);
+}
+
+export async function updateAlert(
+  id: string | number,
+  update: {
+    status?: 'open' | 'acknowledged' | 'resolved';
+    assigned_to_id?: number | null;
+    notes?: string | null;
+  },
+): Promise<AlertApiResponse> {
+  return fetchAPI(`/api/alerts/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(update),
+  });
+}
+
+export interface AlertOperator {
+  id: number;
+  email: string;
+}
+
+export async function getAlertOperators(): Promise<AlertOperator[]> {
+  return fetchAPI('/api/alert-operators');
+}
+
+export interface DashboardSettingsApi {
+  unit: 'celsius' | 'fahrenheit';
+  theme: 'dark' | 'light';
+  refresh_interval_sec: number;
+  threshold_warning_c: number;
+  threshold_critical_c: number;
+  updated_at?: string | null;
+}
+
+export async function getDashboardSettings(): Promise<DashboardSettingsApi> {
+  return fetchAPI('/api/settings');
+}
+
+export async function saveDashboardSettings(
+  settings: Omit<DashboardSettingsApi, 'updated_at'>,
+): Promise<DashboardSettingsApi> {
+  return fetchAPI('/api/settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
   });
 }
