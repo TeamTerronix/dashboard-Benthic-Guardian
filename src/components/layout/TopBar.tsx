@@ -2,10 +2,11 @@
 
 import { useDashboardStore, formatRelativeUpdated } from '@/lib/store';
 import { useMonitoringAreas } from '@/lib/useMonitoringAreas';
-import { Bell, Thermometer, Calendar, RefreshCw, LogIn, LogOut, Sun, Moon, ChevronDown } from 'lucide-react';
+import { Bell, Thermometer, Calendar, RefreshCw, LogIn, LogOut, Sun, Moon, ChevronDown, Menu } from 'lucide-react';
 import Link from 'next/link';
 import { clearToken, getToken } from '@/lib/auth';
 import { dispatchDashboardDataRefresh } from '@/lib/data-refresh';
+import { saveDashboardSettings } from '@/lib/api';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 export default function TopBar() {
@@ -19,6 +20,12 @@ export default function TopBar() {
     selectedNetworkId,
     setSelectedNetworkId,
     lastDataUpdatedAt,
+    sidebarCollapsed,
+    toggleSidebar,
+    toggleMobileSidebar,
+    refreshIntervalSec,
+    thresholdWarningC,
+    thresholdCriticalC,
   } = useDashboardStore();
 
   const { areas, loading: areasLoading } = useMonitoringAreas();
@@ -71,22 +78,46 @@ export default function TopBar() {
     [lastDataUpdatedAt, tick],
   );
 
+  const persistDisplay = (nextUnit: typeof unit, nextTheme: typeof theme) => {
+    void saveDashboardSettings({
+      unit: nextUnit,
+      theme: nextTheme,
+      refresh_interval_sec: refreshIntervalSec,
+      threshold_warning_c: thresholdWarningC,
+      threshold_critical_c: thresholdCriticalC,
+    }).catch(() => {
+      // The settings page exposes save errors; quick toggles remain usable offline.
+    });
+  };
+
   return (
     <header
-      className="h-16 flex items-center justify-between px-6 border-b"
+      className="h-16 flex items-center justify-between gap-2 px-2 md:px-6 border-b"
       style={{
         background: 'var(--bg-surface)',
         borderColor: 'var(--border)',
       }}
     >
-      <div className="flex items-center gap-4 min-w-0">
+      <div className="flex items-center gap-2 md:gap-4 min-w-0">
+        <button
+          type="button"
+          onClick={() => {
+            if (sidebarCollapsed) toggleSidebar();
+            toggleMobileSidebar();
+          }}
+          className="md:hidden p-2 rounded-lg shrink-0"
+          style={{ color: 'var(--text-secondary)' }}
+          aria-label="Open navigation"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
         {/* Network selector */}
         <div className="relative" ref={netRef}>
           <button
             type="button"
             onClick={() => setNetOpen((o) => !o)}
             disabled={areasLoading || areas.length === 0}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm max-w-[240px] cursor-pointer disabled:opacity-60"
+            className="flex items-center gap-2 px-2 md:px-3 py-1.5 rounded-lg text-sm max-w-[150px] sm:max-w-[240px] cursor-pointer disabled:opacity-60"
             style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)' }}
             title="Select monitoring network"
           >
@@ -140,7 +171,7 @@ export default function TopBar() {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="hidden xl:flex items-center gap-2">
           <Calendar className="w-4 h-4 shrink-0" style={{ color: 'var(--text-secondary)' }} />
           <input
             type="date"
@@ -165,7 +196,7 @@ export default function TopBar() {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex items-center gap-1 md:gap-3 shrink-0">
         {hasToken ? (
           <button
             onClick={() => {
@@ -178,7 +209,7 @@ export default function TopBar() {
             title="Logout"
           >
             <LogOut className="w-3.5 h-3.5" />
-            Logout
+            <span className="hidden lg:inline">Logout</span>
           </button>
         ) : (
           <Link
@@ -188,7 +219,7 @@ export default function TopBar() {
             title="Login"
           >
             <LogIn className="w-3.5 h-3.5" />
-            Login
+            <span className="hidden lg:inline">Login</span>
           </Link>
         )}
 
@@ -204,7 +235,10 @@ export default function TopBar() {
         </div>
 
         <button
-          onClick={toggleTheme}
+          onClick={() => {
+            toggleTheme();
+            persistDisplay(unit, theme === 'dark' ? 'light' : 'dark');
+          }}
           className="p-1.5 rounded cursor-pointer transition-colors hover:bg-[var(--bg-elevated)]"
           style={{ color: 'var(--text-secondary)' }}
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -214,7 +248,10 @@ export default function TopBar() {
         </button>
 
         <button
-          onClick={toggleUnit}
+          onClick={() => {
+            toggleUnit();
+            persistDisplay(unit === 'celsius' ? 'fahrenheit' : 'celsius', theme);
+          }}
           className="flex items-center gap-1 px-2 py-1 rounded text-xs font-mono cursor-pointer transition-colors hover:bg-[var(--bg-elevated)]"
           style={{ color: 'var(--accent-cyan)' }}
         >

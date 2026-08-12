@@ -1,28 +1,63 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { RotateCcw, Save } from 'lucide-react';
+import { getDashboardSettings, saveDashboardSettings } from '@/lib/api';
 import { useDashboardStore } from '@/lib/store';
-import { Save, RotateCcw } from 'lucide-react';
+
+const DEFAULTS = {
+  unit: 'celsius' as const,
+  theme: 'dark' as const,
+  refreshIntervalSec: 300,
+  thresholdWarningC: 28,
+  thresholdCriticalC: 29,
+};
 
 export default function SettingsPage() {
   const {
     unit,
-    toggleUnit,
+    setUnit,
     theme,
     setTheme,
     refreshIntervalSec,
     thresholdWarningC,
     thresholdCriticalC,
-    setRefreshIntervalSec,
-    setThresholdWarningC,
-    setThresholdCriticalC,
-    resetSettings,
+    applyRemoteSettings,
   } = useDashboardStore();
+  const [draftRefresh, setDraftRefresh] = useState(refreshIntervalSec);
+  const [draftWarn, setDraftWarn] = useState(thresholdWarningC);
+  const [draftCrit, setDraftCrit] = useState(thresholdCriticalC);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Draft UI state so Save/Reset buttons have meaning.
-  const [draftRefresh, setDraftRefresh] = useState<number>(refreshIntervalSec);
-  const [draftWarn, setDraftWarn] = useState<number>(thresholdWarningC);
-  const [draftCrit, setDraftCrit] = useState<number>(thresholdCriticalC);
+  useEffect(() => {
+    let cancelled = false;
+    getDashboardSettings()
+      .then((settings) => {
+        if (cancelled) return;
+        applyRemoteSettings({
+          unit: settings.unit,
+          theme: settings.theme,
+          refreshIntervalSec: settings.refresh_interval_sec,
+          thresholdWarningC: settings.threshold_warning_c,
+          thresholdCriticalC: settings.threshold_critical_c,
+        });
+        setDraftRefresh(settings.refresh_interval_sec);
+        setDraftWarn(settings.threshold_warning_c);
+        setDraftCrit(settings.threshold_critical_c);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load settings.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [applyRemoteSettings]);
 
   useEffect(() => {
     setDraftRefresh(refreshIntervalSec);
@@ -30,150 +65,146 @@ export default function SettingsPage() {
     setDraftCrit(thresholdCriticalC);
   }, [refreshIntervalSec, thresholdWarningC, thresholdCriticalC]);
 
+  const persist = async (next = {
+    unit,
+    theme,
+    refreshIntervalSec: draftRefresh,
+    thresholdWarningC: draftWarn,
+    thresholdCriticalC: draftCrit,
+  }) => {
+    setError(null);
+    setMessage(null);
+    if (!Number.isFinite(next.thresholdWarningC) || !Number.isFinite(next.thresholdCriticalC)) {
+      setError('Enter valid numeric thresholds.');
+      return;
+    }
+    if (next.thresholdCriticalC <= next.thresholdWarningC) {
+      setError('Critical threshold must be higher than the warning threshold.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const saved = await saveDashboardSettings({
+        unit: next.unit,
+        theme: next.theme,
+        refresh_interval_sec: next.refreshIntervalSec,
+        threshold_warning_c: next.thresholdWarningC,
+        threshold_critical_c: next.thresholdCriticalC,
+      });
+      applyRemoteSettings({
+        unit: saved.unit,
+        theme: saved.theme,
+        refreshIntervalSec: saved.refresh_interval_sec,
+        thresholdWarningC: saved.threshold_warning_c,
+        thresholdCriticalC: saved.threshold_critical_c,
+      });
+      setMessage('Settings saved to your account.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save settings.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reset = () => {
+    setUnit(DEFAULTS.unit);
+    setTheme(DEFAULTS.theme);
+    setDraftRefresh(DEFAULTS.refreshIntervalSec);
+    setDraftWarn(DEFAULTS.thresholdWarningC);
+    setDraftCrit(DEFAULTS.thresholdCriticalC);
+    void persist(DEFAULTS);
+  };
+
   return (
     <div className="space-y-6 max-w-2xl">
-      <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Settings</h2>
+      <div>
+        <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Settings</h2>
+        <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+          These preferences are saved to your account and follow you across browsers.
+        </p>
+      </div>
 
-      {/* Display Settings */}
-      <div
-        className="rounded-xl border p-4 space-y-4"
-        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
-      >
+      {loading && <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading saved settings...</p>}
+      {error && <p className="text-sm p-3 rounded-lg border" style={{ color: 'var(--danger-coral)', borderColor: 'var(--danger-coral)' }}>{error}</p>}
+      {message && <p className="text-sm p-3 rounded-lg border" style={{ color: 'var(--accent-teal)', borderColor: 'var(--accent-teal)' }}>{message}</p>}
+
+      <section className="rounded-xl border p-4 space-y-4" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
         <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Display</h3>
-
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <div className="text-sm" style={{ color: 'var(--text-primary)' }}>Temperature Unit</div>
-            <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>Toggle between Celsius and Fahrenheit</div>
-          </div>
-          <button
-            onClick={toggleUnit}
-            className="px-4 py-1.5 rounded-lg text-xs font-mono font-bold cursor-pointer"
-            style={{ background: 'var(--bg-elevated)', color: 'var(--accent-cyan)' }}
-          >
-            {unit === 'celsius' ? '°C → °F' : '°F → °C'}
-          </button>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm" style={{ color: 'var(--text-primary)' }}>Appearance</div>
-            <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>Switch between dark and light mode</div>
+            <div className="text-sm" style={{ color: 'var(--text-primary)' }}>Temperature unit</div>
+            <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>Choose Celsius or Fahrenheit.</div>
           </div>
           <div className="flex rounded-lg overflow-hidden border" style={{ borderColor: 'var(--border)' }}>
-            <button
-              type="button"
-              onClick={() => setTheme('dark')}
-              className="px-3 py-1.5 text-xs font-medium cursor-pointer"
-              style={{
-                background: theme === 'dark' ? 'var(--accent-cyan)' : 'var(--bg-elevated)',
-                color: theme === 'dark' ? 'var(--bg-primary)' : 'var(--text-secondary)',
-              }}
-            >
-              Dark
-            </button>
-            <button
-              type="button"
-              onClick={() => setTheme('light')}
-              className="px-3 py-1.5 text-xs font-medium cursor-pointer"
-              style={{
-                background: theme === 'light' ? 'var(--accent-cyan)' : 'var(--bg-elevated)',
-                color: theme === 'light' ? '#FFFFFF' : 'var(--text-secondary)',
-              }}
-            >
-              Light
-            </button>
+            {(['celsius', 'fahrenheit'] as const).map((value) => (
+              <button key={value} type="button" onClick={() => setUnit(value)} className="px-3 py-1.5 text-xs font-medium" style={{ background: unit === value ? 'var(--accent-cyan)' : 'var(--bg-elevated)', color: unit === value ? 'var(--bg-primary)' : 'var(--text-secondary)' }}>
+                {value === 'celsius' ? '\u00b0C' : '\u00b0F'}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <div className="text-sm" style={{ color: 'var(--text-primary)' }}>Auto-refresh Interval</div>
-            <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>How often to poll for new data</div>
+            <div className="text-sm" style={{ color: 'var(--text-primary)' }}>Appearance</div>
+            <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>Switch between dark and light mode.</div>
           </div>
-          <select
-            value={draftRefresh}
-            onChange={(e) => setDraftRefresh(parseInt(e.target.value))}
-            className="px-3 py-1.5 rounded-lg text-xs border-none outline-none cursor-pointer"
-            style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)' }}
-          >
+          <div className="flex rounded-lg overflow-hidden border" style={{ borderColor: 'var(--border)' }}>
+            {(['dark', 'light'] as const).map((value) => (
+              <button key={value} type="button" onClick={() => setTheme(value)} className="px-3 py-1.5 text-xs font-medium capitalize" style={{ background: theme === value ? 'var(--accent-cyan)' : 'var(--bg-elevated)', color: theme === value ? 'var(--bg-primary)' : 'var(--text-secondary)' }}>
+                {value}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="text-sm" style={{ color: 'var(--text-primary)' }}>Auto-refresh interval</div>
+            <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>How often the dashboard polls for fresh data.</div>
+          </div>
+          <select value={draftRefresh} onChange={(event) => setDraftRefresh(Number(event.target.value))} className="px-3 py-2 rounded-lg text-xs" style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)' }}>
             <option value={60}>1 minute</option>
             <option value={300}>5 minutes</option>
             <option value={900}>15 minutes</option>
             <option value={3600}>1 hour</option>
           </select>
         </div>
-      </div>
+      </section>
 
-      {/* Threshold Settings */}
-      <div
-        className="rounded-xl border p-4 space-y-4"
-        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
-      >
-        <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Temperature Thresholds</h3>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm" style={{ color: 'var(--warn-amber)' }}>Warning Threshold</div>
-            <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>Triggers yellow alerts on charts</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              step={0.1}
-              value={draftWarn}
-              onChange={(e) => setDraftWarn(parseFloat(e.target.value))}
-              className="w-20 px-2 py-1 rounded text-sm font-mono text-right border-none outline-none"
-              style={{ background: 'var(--bg-elevated)', color: 'var(--warn-amber)' }}
-            />
-            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>°C</span>
-          </div>
+      <section className="rounded-xl border p-4 space-y-4" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+        <div>
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Chart thresholds</h3>
+          <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+            These values control your chart colours. Server-generated bleaching alerts currently use the operational 31&deg;C threshold.
+          </p>
         </div>
+        <ThresholdInput label="Warning threshold" value={draftWarn} color="var(--warn-amber)" onChange={setDraftWarn} />
+        <ThresholdInput label="Critical threshold" value={draftCrit} color="var(--danger-coral)" onChange={setDraftCrit} />
+      </section>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm" style={{ color: 'var(--danger-coral)' }}>Critical Threshold</div>
-            <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>Triggers red alerts and notifications</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              step={0.1}
-              value={draftCrit}
-              onChange={(e) => setDraftCrit(parseFloat(e.target.value))}
-              className="w-20 px-2 py-1 rounded text-sm font-mono text-right border-none outline-none"
-              style={{ background: 'var(--bg-elevated)', color: 'var(--danger-coral)' }}
-            />
-            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>°C</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => {
-            setRefreshIntervalSec(draftRefresh);
-            setThresholdWarningC(draftWarn);
-            setThresholdCriticalC(draftCrit);
-          }}
-          className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm cursor-pointer transition-opacity hover:opacity-90"
-          style={{ background: 'var(--accent-cyan)', color: 'var(--bg-primary)' }}
-        >
+      <div className="flex flex-col sm:flex-row gap-3">
+        <button type="button" disabled={saving || loading} onClick={() => void persist()} className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm disabled:opacity-50" style={{ background: 'var(--accent-cyan)', color: 'var(--bg-primary)' }}>
           <Save className="w-4 h-4" />
-          Save Settings
+          {saving ? 'Saving...' : 'Save settings'}
         </button>
-        <button
-          onClick={() => {
-            resetSettings();
-          }}
-          className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm cursor-pointer transition-opacity hover:opacity-90 border"
-          style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-        >
+        <button type="button" disabled={saving || loading} onClick={reset} className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm border disabled:opacity-50" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
           <RotateCcw className="w-4 h-4" />
-          Reset to Defaults
+          Reset to defaults
         </button>
       </div>
     </div>
+  );
+}
+
+function ThresholdInput({ label, value, color, onChange }: { label: string; value: number; color: string; onChange: (value: number) => void }) {
+  return (
+    <label className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-sm" style={{ color }}>
+      {label}
+      <span className="flex items-center gap-2">
+        <input type="number" min={-5} max={50} step={0.1} value={value} onChange={(event) => onChange(Number(event.target.value))} className="w-24 px-3 py-2 rounded-lg text-right" style={{ background: 'var(--bg-elevated)', color }} />
+        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>&deg;C</span>
+      </span>
+    </label>
   );
 }

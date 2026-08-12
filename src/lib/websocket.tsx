@@ -27,6 +27,9 @@ import type { Alert } from './types';
 
 interface AlertMessage {
   type: string;
+  alert_id?: number;
+  message?: string;
+  status?: 'open' | 'acknowledged' | 'resolved';
   sensor_id: number;
   sensor_uid: string;
   location_name: string;
@@ -66,13 +69,16 @@ function AlertWebSocketConnected({ url }: { url: string }) {
     const loc = msg.location_name ?? msg.sensor_uid;
 
     addAlert({
-      id: `${msg.sensor_id}-${msg.timestamp}`,
+      id: String(msg.alert_id ?? `${msg.sensor_id}-${msg.timestamp}`),
       type: 'critical',
       nodeId: msg.sensor_uid,
       message: `${loc} recorded ${msg.temperature.toFixed(1)}°C (bleaching threshold exceeded)`,
       temperature: msg.temperature,
       timestamp: msg.timestamp,
       acknowledged: false,
+      status: msg.status ?? 'open',
+      sensorId: msg.sensor_id,
+      riskLevel: msg.risk_level,
     } satisfies Alert);
 
     toast.error(`Bleaching Alert — ${loc}`, {
@@ -89,11 +95,12 @@ function AlertWebSocketConnected({ url }: { url: string }) {
 }
 
 export function AlertWebSocket() {
-  const [token, setToken] = useState<string | null>(null);
+  const [token] = useState<string | null>(() =>
+    typeof window === 'undefined' ? null : localStorage.getItem(TOKEN_STORAGE_KEY),
+  );
   const setWsConnected = useDashboardStore((s) => s.setWsConnected);
 
   useEffect(() => {
-    setToken(localStorage.getItem(TOKEN_STORAGE_KEY));
     return () => setWsConnected(false);
   }, [setWsConnected]);
 

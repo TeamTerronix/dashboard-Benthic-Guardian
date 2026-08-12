@@ -49,6 +49,16 @@ export interface Alert {
   temperature?: number;
   timestamp: string;
   acknowledged: boolean;
+  status?: 'open' | 'acknowledged' | 'resolved';
+  sensorId?: number | null;
+  networkGroupId?: string | null;
+  riskLevel?: number | null;
+  assignedToId?: number | null;
+  assignedToEmail?: string | null;
+  acknowledgedByEmail?: string | null;
+  acknowledgedAt?: string | null;
+  resolvedAt?: string | null;
+  notes?: string | null;
 }
 
 export interface AlertRule {

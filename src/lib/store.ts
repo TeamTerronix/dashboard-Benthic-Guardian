@@ -24,6 +24,9 @@ interface DashboardState {
   // Sidebar
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
+  mobileSidebarOpen: boolean;
+  setMobileSidebarOpen: (open: boolean) => void;
+  toggleMobileSidebar: () => void;
 
   // Date range (filters history views)
   dateRange: { from: string; to: string };
@@ -49,6 +52,7 @@ interface DashboardState {
 
   // Unit
   unit: 'celsius' | 'fahrenheit';
+  setUnit: (unit: 'celsius' | 'fahrenheit') => void;
   toggleUnit: () => void;
 
   // Theme
@@ -63,6 +67,13 @@ interface DashboardState {
   setRefreshIntervalSec: (sec: number) => void;
   setThresholdWarningC: (c: number) => void;
   setThresholdCriticalC: (c: number) => void;
+  applyRemoteSettings: (settings: {
+    unit: 'celsius' | 'fahrenheit';
+    theme: 'dark' | 'light';
+    refreshIntervalSec: number;
+    thresholdWarningC: number;
+    thresholdCriticalC: number;
+  }) => void;
   resetSettings: () => void;
 
   // Active page
@@ -71,6 +82,7 @@ interface DashboardState {
 
   // Alerts
   alerts: Alert[];
+  setAlerts: (alerts: Alert[]) => void;
   addAlert: (alert: Alert) => void;
   acknowledgeAlert: (id: string) => void;
   clearAlerts: () => void;
@@ -89,6 +101,7 @@ export const useDashboardStore = create<DashboardState>()(
   persist(
     (set) => ({
       alerts: [],
+      setAlerts: (alerts) => set({ alerts }),
       addAlert: (alert) => set((s) => ({ alerts: [alert, ...s.alerts].slice(0, 50) })),
       acknowledgeAlert: (id) =>
         set((s) => ({ alerts: s.alerts.map((a) => (a.id === id ? { ...a, acknowledged: true } : a)) })),
@@ -99,6 +112,9 @@ export const useDashboardStore = create<DashboardState>()(
 
       sidebarCollapsed: false,
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      mobileSidebarOpen: false,
+      setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
+      toggleMobileSidebar: () => set((s) => ({ mobileSidebarOpen: !s.mobileSidebarOpen })),
 
       dateRange: defaultDateRange(),
       setDateRange: (from, to) => set({ dateRange: { from, to } }),
@@ -127,6 +143,7 @@ export const useDashboardStore = create<DashboardState>()(
       deselectAllNodes: () => set({ selectedNodes: [] }),
 
       unit: 'celsius',
+      setUnit: (unit) => set({ unit }),
       toggleUnit: () => set((s) => ({ unit: s.unit === 'celsius' ? 'fahrenheit' : 'celsius' })),
 
       theme: 'dark',
@@ -139,6 +156,13 @@ export const useDashboardStore = create<DashboardState>()(
       setRefreshIntervalSec: (sec) => set({ refreshIntervalSec: sec }),
       setThresholdWarningC: (c) => set({ thresholdWarningC: c }),
       setThresholdCriticalC: (c) => set({ thresholdCriticalC: c }),
+      applyRemoteSettings: (settings) => set({
+        unit: settings.unit,
+        theme: settings.theme,
+        refreshIntervalSec: settings.refreshIntervalSec,
+        thresholdWarningC: settings.thresholdWarningC,
+        thresholdCriticalC: settings.thresholdCriticalC,
+      }),
       resetSettings: () => set({ ...DEFAULT_SETTINGS }),
 
       activePage: 'dashboard',
