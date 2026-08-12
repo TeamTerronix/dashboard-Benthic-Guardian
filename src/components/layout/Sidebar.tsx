@@ -38,7 +38,12 @@ const adminItems = [
 ];
 
 export default function Sidebar() {
-  const { sidebarCollapsed, toggleSidebar } = useDashboardStore();
+  const {
+    sidebarCollapsed,
+    toggleSidebar,
+    mobileSidebarOpen,
+    setMobileSidebarOpen,
+  } = useDashboardStore();
   const pathname = usePathname();
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -58,10 +63,19 @@ export default function Sidebar() {
   }, []);
 
   return (
+    <>
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          onClick={() => setMobileSidebarOpen(false)}
+          className="fixed inset-0 z-30 bg-black/55 md:hidden"
+        />
+      )}
     <aside
-      className={`fixed left-0 top-0 h-full z-40 flex flex-col border-r transition-all duration-300 ${
-        sidebarCollapsed ? 'w-16' : 'w-56'
-      }`}
+      className={`fixed left-0 top-0 h-full z-40 w-64 flex flex-col border-r transition-all duration-300
+        ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
+        ${sidebarCollapsed ? 'md:w-16' : 'md:w-56'}`}
       style={{
         background: 'var(--bg-surface)',
         borderColor: 'var(--border)',
@@ -86,6 +100,7 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              onClick={() => setMobileSidebarOpen(false)}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 isActive ? 'text-white' : 'hover:bg-[var(--bg-elevated)]'
               }`}
@@ -120,6 +135,7 @@ export default function Sidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={() => setMobileSidebarOpen(false)}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                     isActive ? 'text-white' : 'hover:bg-[var(--bg-elevated)]'
                   }`}
@@ -141,11 +157,12 @@ export default function Sidebar() {
       {/* Collapse Toggle */}
       <button
         onClick={toggleSidebar}
-        className="flex items-center justify-center h-12 border-t cursor-pointer hover:bg-[var(--bg-elevated)] transition-colors"
+        className="hidden md:flex items-center justify-center h-12 border-t cursor-pointer hover:bg-[var(--bg-elevated)] transition-colors"
         style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
       >
         {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
       </button>
     </aside>
+    </>
   );
 }
