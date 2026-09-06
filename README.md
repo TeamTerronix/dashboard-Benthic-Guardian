@@ -14,7 +14,7 @@ IoT dashboard built with Next.js, TypeScript, Tailwind CSS, and map/analytics co
 
 ```bash
 git clone https://github.com/TeamTerronix/dashboard.git
-cd dashboard
+cd dashboard-Benthic-Guardian
 ```
 
 ## Install Dependencies

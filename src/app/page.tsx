@@ -161,6 +161,23 @@ export default function DashboardPage() {
     );
   }
 
+  if (!latestReadings.length) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center min-h-[40vh] rounded-xl border text-center p-8"
+        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+      >
+        <Activity className="w-8 h-8 mb-3" style={{ color: 'var(--accent-cyan)' }} />
+        <h3 className="text-base font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
+          No sensor data yet
+        </h3>
+        <p className="max-w-md text-sm">
+          The dashboard is waiting for the first readings from your monitoring network.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header with area selector */}
