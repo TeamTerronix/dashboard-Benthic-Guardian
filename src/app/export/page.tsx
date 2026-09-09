@@ -2,10 +2,11 @@
 
 import { useState } from 'react';
 import { Download, FileJson, FileSpreadsheet, FileText, FileType } from 'lucide-react';
-import { getDHW, getMe, getNetworkGroups, getPredictions, getSST } from '@/lib/api';
+import { generateReport, type ReportApiPayload } from '@/lib/api';
 import { useDashboardStore } from '@/lib/store';
 
 type Format = 'csv' | 'json' | 'netcdf' | 'pdf';
+type ReportFormat = 'csv' | 'json' | 'pdf';
 
 interface ExportConfig {
   format: Format;
@@ -21,7 +22,7 @@ const formatInfo: Record<Format, { icon: typeof FileSpreadsheet; label: string; 
   csv: { icon: FileSpreadsheet, label: 'CSV', desc: 'Spreadsheet-ready data', available: true },
   json: { icon: FileJson, label: 'JSON', desc: 'Structured data and metadata', available: true },
   netcdf: { icon: FileType, label: 'NetCDF', desc: 'Coming soon', available: false },
-  pdf: { icon: FileText, label: 'PDF Report', desc: 'Coming soon', available: false },
+  pdf: { icon: FileText, label: 'PDF Report', desc: 'Generated from the report payload', available: true },
 };
 
 function rowsFrom(payload: unknown): Record<string, unknown>[] {
@@ -51,7 +52,7 @@ function buildCsv(groups: { name: string; rows: Record<string, unknown>[] }[], m
   return [...comments, ...body].join('\r\n');
 }
 
-function downloadFile(contents: string, mime: string, filename: string) {
+function downloadFile(contents: BlobPart, mime: string, filename: string) {
   const blob = new Blob([contents], { type: mime });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -61,6 +62,55 @@ function downloadFile(contents: string, mime: string, filename: string) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function escapePdfText(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)').replace(/\r/g, '').replace(/\n/g, ' ');
+}
+
+function buildPdfReport(report: ReportApiPayload): string {
+  const lines = [
+    'SLIOT Report',
+    `Generated: ${report.summary.generated_at ?? 'n/a'}`,
+    `Range: ${report.summary.date_from ?? 'start'} to ${report.summary.date_to ?? 'end'}`,
+    `Readings: ${report.summary.total_readings}`,
+    `Predictions: ${report.summary.total_predictions}`,
+    `DHW points: ${report.summary.total_dhw}`,
+    `Avg temp: ${report.summary.average_temperature ?? 'n/a'}°C`,
+    `Max temp: ${report.summary.max_temperature ?? 'n/a'}°C`,
+    `Healthy: ${report.risk_summary.healthy}`,
+    `Warning: ${report.risk_summary.warning}`,
+    `Danger: ${report.risk_summary.danger}`,
+    `Avg risk: ${report.risk_summary.avg_risk_score ?? 'n/a'}`,
+  ];
+
+  let content = '';
+  lines.forEach((line, index) => {
+    const y = 790 - index * 18;
+    content += `BT /F1 11 Tf 50 ${y} Td (${escapePdfText(line)}) Tj ET\n`;
+  });
+
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 5 0 R /Resources << /Font << /F1 4 0 R >> >> >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${content.length} >>\nstream\n${content}endstream`,
+  ];
+
+  let pdf = '%PDF-1.4\n';
+  const offsets: number[] = [0];
+  for (let i = 0; i < objects.length; i += 1) {
+    offsets.push(pdf.length);
+    pdf += `${i + 1} 0 obj\n${objects[i]}\nendobj\n`;
+  }
+  const xrefStart = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i < offsets.length; i += 1) {
+    pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+  return pdf;
 }
 
 export default function ExportPage() {
@@ -82,7 +132,7 @@ export default function ExportPage() {
   const handleExport = async () => {
     setError(null);
     setMessage(null);
-    if (config.format !== 'csv' && config.format !== 'json') {
+    if (!['csv', 'json', 'pdf'].includes(config.format)) {
       setError('This export format is not available yet.');
       return;
     }
@@ -99,50 +149,42 @@ export default function ExportPage() {
     try {
       const rangeStart = `${config.dateFrom}T00:00:00.000Z`;
       const rangeEnd = `${config.dateTo}T23:59:59.999Z`;
-      const tasks: Promise<{ name: string; rows: Record<string, unknown>[] }>[] = [];
-      if (config.includeSST) {
-        tasks.push(getSST(rangeStart, rangeEnd, 10000).then((data) => ({ name: 'sst', rows: rowsFrom(data) })));
-      }
-      if (config.includeDHW) {
-        tasks.push(getDHW(rangeStart, rangeEnd, 10000).then((data) => ({ name: 'dhw', rows: rowsFrom(data) })));
-      }
-      if (config.includePredictions) {
-        tasks.push(getPredictions(0, 5000).then((data) => {
-          const start = Date.parse(`${config.dateFrom}T00:00:00Z`);
-          const end = Date.parse(`${config.dateTo}T23:59:59.999Z`);
-          const rows = rowsFrom(data).filter((row) => {
-            const time = Date.parse(String(row.target_timestamp ?? ''));
-            return Number.isFinite(time) && time >= start && time <= end;
-          });
-          return { name: 'predictions', rows };
-        }));
-      }
+      const reportFormat: ReportFormat = config.format === 'netcdf' ? 'json' : config.format;
+      const report = await generateReport({
+        start: rangeStart,
+        end: rangeEnd,
+        format: reportFormat,
+      });
 
-      const [groups, profile, networks] = await Promise.all([
-        Promise.all(tasks),
-        config.includeMetadata ? getMe() : Promise.resolve(null),
-        config.includeMetadata ? getNetworkGroups() : Promise.resolve([]),
-      ]);
+      const groups: { name: string; rows: Record<string, unknown>[] }[] = [];
+      if (config.includeSST) groups.push({ name: 'sst', rows: report.datasets.sst ?? [] });
+      if (config.includeDHW) groups.push({ name: 'dhw', rows: report.datasets.dhw ?? [] });
+      if (config.includePredictions) groups.push({ name: 'predictions', rows: report.datasets.predictions ?? [] });
+
       const rowCount = groups.reduce((sum, group) => sum + group.rows.length, 0);
-      const metadata = config.includeMetadata ? {
-        generated_at: new Date().toISOString(),
-        generated_by: profile?.email ?? '',
-        date_from: config.dateFrom,
-        date_to: config.dateTo,
-        selected_network_id: selectedNetworkId ?? 'all-visible-networks',
-        visible_networks: networks.map((network) => `${network.id}:${network.name ?? ''}`).join('; '),
-        row_count: rowCount,
-      } : undefined;
+      const metadata = config.includeMetadata
+        ? {
+            generated_at: report.metadata.generated_at ?? new Date().toISOString(),
+            generated_by: report.metadata.generated_by ?? '',
+            date_from: config.dateFrom,
+            date_to: config.dateTo,
+            selected_network_id: selectedNetworkId ?? 'all-visible-networks',
+            visible_networks: 'report-generated-from-api',
+            row_count: rowCount,
+          }
+        : undefined;
       const basename = `benthic-guardian-${config.dateFrom}-to-${config.dateTo}`;
 
       if (config.format === 'csv') {
         downloadFile(buildCsv(groups, metadata), 'text/csv;charset=utf-8', `${basename}.csv`);
-      } else {
+      } else if (config.format === 'json') {
         downloadFile(
           JSON.stringify({ metadata, data: Object.fromEntries(groups.map((group) => [group.name, group.rows])) }, null, 2),
           'application/json;charset=utf-8',
           `${basename}.json`,
         );
+      } else {
+        downloadFile(buildPdfReport(report), 'application/pdf;charset=utf-8', `${basename}.pdf`);
       }
       setMessage(`Exported ${rowCount.toLocaleString()} rows.`);
     } catch (err) {
