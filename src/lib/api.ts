@@ -127,6 +127,46 @@ export async function getRiskSummary() {
   return fetchAPI('/api/risk-summary');
 }
 
+export interface ReportApiPayload {
+  summary: {
+    generated_at: string;
+    date_from: string | null;
+    date_to: string | null;
+    total_readings: number;
+    total_predictions: number;
+    total_dhw: number;
+    average_temperature: number | null;
+    max_temperature: number | null;
+  };
+  risk_summary: {
+    total_points: number;
+    healthy: number;
+    warning: number;
+    danger: number;
+    avg_temperature: number | null;
+    max_temperature: number | null;
+    avg_risk_score: number | null;
+  };
+  datasets: {
+    sst: Record<string, unknown>[];
+    dhw: Record<string, unknown>[];
+    predictions: Record<string, unknown>[];
+  };
+  metadata: Record<string, unknown>;
+}
+
+export async function generateReport(params: {
+  start?: string;
+  end?: string;
+  format?: 'json' | 'csv' | 'pdf';
+} = {}): Promise<ReportApiPayload> {
+  const query = new URLSearchParams();
+  if (params.start) query.set('start', params.start);
+  if (params.end) query.set('end', params.end);
+  query.set('format', params.format ?? 'json');
+  return fetchAPI(`/api/report?${query}`);
+}
+
 export interface UserProfile {
   id: number;
   email: string;
