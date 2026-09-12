@@ -163,8 +163,68 @@ export async function generateReport(params: {
   const query = new URLSearchParams();
   if (params.start) query.set('start', params.start);
   if (params.end) query.set('end', params.end);
-  query.set('format', params.format ?? 'json');
+  query.set('format', 'json');
+  query.set('download', 'false');
   return fetchAPI(`/api/report?${query}`);
+}
+
+/** Download a server-generated report file (JSON / CSV / PDF). */
+export async function downloadReportFile(params: {
+  start?: string;
+  end?: string;
+  format: 'json' | 'csv' | 'pdf';
+  includeSST?: boolean;
+  includeDHW?: boolean;
+  includePredictions?: boolean;
+  includeMetadata?: boolean;
+}): Promise<Blob> {
+  const query = new URLSearchParams();
+  if (params.start) query.set('start', params.start);
+  if (params.end) query.set('end', params.end);
+  query.set('format', params.format);
+  query.set('download', 'true');
+  query.set('include_sst', String(params.includeSST ?? true));
+  query.set('include_dhw', String(params.includeDHW ?? true));
+  query.set('include_predictions', String(params.includePredictions ?? true));
+  query.set('include_metadata', String(params.includeMetadata ?? true));
+
+  const accept =
+    params.format === 'pdf'
+      ? 'application/pdf'
+      : params.format === 'csv'
+        ? 'text/csv'
+        : 'application/json';
+  const headers: Record<string, string> = { Accept: accept };
+  if (typeof window !== 'undefined') {
+    const tok = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (tok) headers.Authorization = `Bearer ${tok}`;
+  }
+
+  const res = await fetch(`${API_BASE}/api/report?${query}`, { headers });
+  if (res.status === 401 && typeof window !== 'undefined') {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+  if (!res.ok) {
+    let detail = `API ${res.status} for /api/report (${params.format})`;
+    try {
+      const j = await res.json();
+      if (j?.detail) detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail);
+    } catch {
+      // ignore
+    }
+    throw new Error(detail);
+  }
+  return res.blob();
+}
+
+/** @deprecated Prefer downloadReportFile({ format: 'pdf' }) */
+export async function downloadReportPdf(params: {
+  start?: string;
+  end?: string;
+} = {}): Promise<Blob> {
+  return downloadReportFile({ ...params, format: 'pdf' });
 }
 
 export interface UserProfile {

@@ -2,11 +2,10 @@
 
 import { useState } from 'react';
 import { Download, FileJson, FileSpreadsheet, FileText, FileType } from 'lucide-react';
-import { generateReport, type ReportApiPayload } from '@/lib/api';
+import { downloadReportFile } from '@/lib/api';
 import { useDashboardStore } from '@/lib/store';
 
 type Format = 'csv' | 'json' | 'netcdf' | 'pdf';
-type ReportFormat = 'csv' | 'json' | 'pdf';
 
 interface ExportConfig {
   format: Format;
@@ -19,41 +18,20 @@ interface ExportConfig {
 }
 
 const formatInfo: Record<Format, { icon: typeof FileSpreadsheet; label: string; desc: string; available: boolean }> = {
-  csv: { icon: FileSpreadsheet, label: 'CSV', desc: 'Spreadsheet-ready data', available: true },
-  json: { icon: FileJson, label: 'JSON', desc: 'Structured data and metadata', available: true },
+  csv: { icon: FileSpreadsheet, label: 'CSV', desc: 'Server-generated spreadsheet export', available: true },
+  json: { icon: FileJson, label: 'JSON', desc: 'Server-generated structured export', available: true },
   netcdf: { icon: FileType, label: 'NetCDF', desc: 'Coming soon', available: false },
-  pdf: { icon: FileText, label: 'PDF Report', desc: 'Generated from the report payload', available: true },
+  pdf: { icon: FileText, label: 'PDF Report', desc: 'Server-generated Benthic Guardian PDF', available: true },
 };
 
-function rowsFrom(payload: unknown): Record<string, unknown>[] {
-  if (Array.isArray(payload)) return payload as Record<string, unknown>[];
-  if (payload && typeof payload === 'object' && Array.isArray((payload as { value?: unknown }).value)) {
-    return (payload as { value: Record<string, unknown>[] }).value;
-  }
-  return [];
-}
-
-function safeCsvCell(value: unknown): string {
-  if (value == null) return '';
-  let text = typeof value === 'object' ? JSON.stringify(value) : String(value);
-  if (/^[=+\-@]/.test(text)) text = `'${text}`;
-  return `"${text.replaceAll('"', '""')}"`;
-}
-
-function buildCsv(groups: { name: string; rows: Record<string, unknown>[] }[], metadata?: Record<string, unknown>): string {
-  const flattened: Record<string, unknown>[] = groups.flatMap((group) => group.rows.map((row) => ({ dataset: group.name, ...row })));
-  const columns = Array.from(new Set(flattened.flatMap((row) => Object.keys(row))));
-  const body = [
-    columns.map(safeCsvCell).join(','),
-    ...flattened.map((row) => columns.map((column) => safeCsvCell(row[column])).join(',')),
-  ];
-  if (!metadata) return body.join('\r\n');
-  const comments = Object.entries(metadata).map(([key, value]) => `# ${key}: ${String(value)}`);
-  return [...comments, ...body].join('\r\n');
-}
+const mimeByFormat: Record<'csv' | 'json' | 'pdf', string> = {
+  csv: 'text/csv;charset=utf-8',
+  json: 'application/json;charset=utf-8',
+  pdf: 'application/pdf',
+};
 
 function downloadFile(contents: BlobPart, mime: string, filename: string) {
-  const blob = new Blob([contents], { type: mime });
+  const blob = contents instanceof Blob ? contents : new Blob([contents], { type: mime });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -64,58 +42,8 @@ function downloadFile(contents: BlobPart, mime: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-function escapePdfText(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)').replace(/\r/g, '').replace(/\n/g, ' ');
-}
-
-function buildPdfReport(report: ReportApiPayload): string {
-  const lines = [
-    'SLIOT Report',
-    `Generated: ${report.summary.generated_at ?? 'n/a'}`,
-    `Range: ${report.summary.date_from ?? 'start'} to ${report.summary.date_to ?? 'end'}`,
-    `Readings: ${report.summary.total_readings}`,
-    `Predictions: ${report.summary.total_predictions}`,
-    `DHW points: ${report.summary.total_dhw}`,
-    `Avg temp: ${report.summary.average_temperature ?? 'n/a'}°C`,
-    `Max temp: ${report.summary.max_temperature ?? 'n/a'}°C`,
-    `Healthy: ${report.risk_summary.healthy}`,
-    `Warning: ${report.risk_summary.warning}`,
-    `Danger: ${report.risk_summary.danger}`,
-    `Avg risk: ${report.risk_summary.avg_risk_score ?? 'n/a'}`,
-  ];
-
-  let content = '';
-  lines.forEach((line, index) => {
-    const y = 790 - index * 18;
-    content += `BT /F1 11 Tf 50 ${y} Td (${escapePdfText(line)}) Tj ET\n`;
-  });
-
-  const objects = [
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 5 0 R /Resources << /Font << /F1 4 0 R >> >> >>',
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-    `<< /Length ${content.length} >>\nstream\n${content}endstream`,
-  ];
-
-  let pdf = '%PDF-1.4\n';
-  const offsets: number[] = [0];
-  for (let i = 0; i < objects.length; i += 1) {
-    offsets.push(pdf.length);
-    pdf += `${i + 1} 0 obj\n${objects[i]}\nendobj\n`;
-  }
-  const xrefStart = pdf.length;
-  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  for (let i = 1; i < offsets.length; i += 1) {
-    pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
-  }
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
-  return pdf;
-}
-
 export default function ExportPage() {
   const dateRange = useDashboardStore((s) => s.dateRange);
-  const selectedNetworkId = useDashboardStore((s) => s.selectedNetworkId);
   const [config, setConfig] = useState<ExportConfig>({
     format: 'csv',
     dateFrom: dateRange.from,
@@ -149,44 +77,21 @@ export default function ExportPage() {
     try {
       const rangeStart = `${config.dateFrom}T00:00:00.000Z`;
       const rangeEnd = `${config.dateTo}T23:59:59.999Z`;
-      const reportFormat: ReportFormat = config.format === 'netcdf' ? 'json' : config.format;
-      const report = await generateReport({
+      const basename = `benthic-guardian-${config.dateFrom}-to-${config.dateTo}`;
+      const format = config.format as 'csv' | 'json' | 'pdf';
+
+      const blob = await downloadReportFile({
         start: rangeStart,
         end: rangeEnd,
-        format: reportFormat,
+        format,
+        includeSST: config.includeSST,
+        includeDHW: config.includeDHW,
+        includePredictions: config.includePredictions,
+        includeMetadata: config.includeMetadata,
       });
 
-      const groups: { name: string; rows: Record<string, unknown>[] }[] = [];
-      if (config.includeSST) groups.push({ name: 'sst', rows: report.datasets.sst ?? [] });
-      if (config.includeDHW) groups.push({ name: 'dhw', rows: report.datasets.dhw ?? [] });
-      if (config.includePredictions) groups.push({ name: 'predictions', rows: report.datasets.predictions ?? [] });
-
-      const rowCount = groups.reduce((sum, group) => sum + group.rows.length, 0);
-      const metadata = config.includeMetadata
-        ? {
-            generated_at: report.metadata.generated_at ?? new Date().toISOString(),
-            generated_by: report.metadata.generated_by ?? '',
-            date_from: config.dateFrom,
-            date_to: config.dateTo,
-            selected_network_id: selectedNetworkId ?? 'all-visible-networks',
-            visible_networks: 'report-generated-from-api',
-            row_count: rowCount,
-          }
-        : undefined;
-      const basename = `benthic-guardian-${config.dateFrom}-to-${config.dateTo}`;
-
-      if (config.format === 'csv') {
-        downloadFile(buildCsv(groups, metadata), 'text/csv;charset=utf-8', `${basename}.csv`);
-      } else if (config.format === 'json') {
-        downloadFile(
-          JSON.stringify({ metadata, data: Object.fromEntries(groups.map((group) => [group.name, group.rows])) }, null, 2),
-          'application/json;charset=utf-8',
-          `${basename}.json`,
-        );
-      } else {
-        downloadFile(buildPdfReport(report), 'application/pdf;charset=utf-8', `${basename}.pdf`);
-      }
-      setMessage(`Exported ${rowCount.toLocaleString()} rows.`);
+      downloadFile(blob, mimeByFormat[format], `${basename}.${format}`);
+      setMessage(`Exported ${format.toUpperCase()} from the Benthic Guardian API server.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Export failed.');
     } finally {
@@ -198,7 +103,9 @@ export default function ExportPage() {
     <div className="space-y-6 max-w-3xl">
       <div>
         <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Data Export Builder</h2>
-        <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>CSV and JSON downloads contain live data from the API.</p>
+        <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+          CSV, JSON, and PDF files are generated on the backend and downloaded securely.
+        </p>
       </div>
 
       {error && <p className="p-3 rounded-lg border text-sm" style={{ borderColor: 'var(--danger-coral)', color: 'var(--danger-coral)' }}>{error}</p>}
