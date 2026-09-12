@@ -163,21 +163,38 @@ export async function generateReport(params: {
   const query = new URLSearchParams();
   if (params.start) query.set('start', params.start);
   if (params.end) query.set('end', params.end);
-  query.set('format', params.format ?? 'json');
+  query.set('format', 'json');
+  query.set('download', 'false');
   return fetchAPI(`/api/report?${query}`);
 }
 
-/** Download a server-generated branded PDF report (safer than client-side PDF build). */
-export async function downloadReportPdf(params: {
+/** Download a server-generated report file (JSON / CSV / PDF). */
+export async function downloadReportFile(params: {
   start?: string;
   end?: string;
-} = {}): Promise<Blob> {
+  format: 'json' | 'csv' | 'pdf';
+  includeSST?: boolean;
+  includeDHW?: boolean;
+  includePredictions?: boolean;
+  includeMetadata?: boolean;
+}): Promise<Blob> {
   const query = new URLSearchParams();
   if (params.start) query.set('start', params.start);
   if (params.end) query.set('end', params.end);
-  query.set('format', 'pdf');
+  query.set('format', params.format);
+  query.set('download', 'true');
+  query.set('include_sst', String(params.includeSST ?? true));
+  query.set('include_dhw', String(params.includeDHW ?? true));
+  query.set('include_predictions', String(params.includePredictions ?? true));
+  query.set('include_metadata', String(params.includeMetadata ?? true));
 
-  const headers: Record<string, string> = { Accept: 'application/pdf' };
+  const accept =
+    params.format === 'pdf'
+      ? 'application/pdf'
+      : params.format === 'csv'
+        ? 'text/csv'
+        : 'application/json';
+  const headers: Record<string, string> = { Accept: accept };
   if (typeof window !== 'undefined') {
     const tok = localStorage.getItem(TOKEN_STORAGE_KEY);
     if (tok) headers.Authorization = `Bearer ${tok}`;
@@ -190,7 +207,7 @@ export async function downloadReportPdf(params: {
     throw new Error('Unauthorized');
   }
   if (!res.ok) {
-    let detail = `API ${res.status} for /api/report (pdf)`;
+    let detail = `API ${res.status} for /api/report (${params.format})`;
     try {
       const j = await res.json();
       if (j?.detail) detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail);
@@ -200,6 +217,14 @@ export async function downloadReportPdf(params: {
     throw new Error(detail);
   }
   return res.blob();
+}
+
+/** @deprecated Prefer downloadReportFile({ format: 'pdf' }) */
+export async function downloadReportPdf(params: {
+  start?: string;
+  end?: string;
+} = {}): Promise<Blob> {
+  return downloadReportFile({ ...params, format: 'pdf' });
 }
 
 export interface UserProfile {

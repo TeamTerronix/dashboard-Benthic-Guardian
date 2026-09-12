@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Download, FileJson, FileSpreadsheet, FileText, FileType } from 'lucide-react';
-import { downloadReportPdf, generateReport } from '@/lib/api';
+import { downloadReportFile } from '@/lib/api';
 import { useDashboardStore } from '@/lib/store';
 
 type Format = 'csv' | 'json' | 'netcdf' | 'pdf';
@@ -18,30 +18,17 @@ interface ExportConfig {
 }
 
 const formatInfo: Record<Format, { icon: typeof FileSpreadsheet; label: string; desc: string; available: boolean }> = {
-  csv: { icon: FileSpreadsheet, label: 'CSV', desc: 'Spreadsheet-ready data', available: true },
-  json: { icon: FileJson, label: 'JSON', desc: 'Structured data and metadata', available: true },
+  csv: { icon: FileSpreadsheet, label: 'CSV', desc: 'Server-generated spreadsheet export', available: true },
+  json: { icon: FileJson, label: 'JSON', desc: 'Server-generated structured export', available: true },
   netcdf: { icon: FileType, label: 'NetCDF', desc: 'Coming soon', available: false },
   pdf: { icon: FileText, label: 'PDF Report', desc: 'Server-generated Benthic Guardian PDF', available: true },
 };
 
-function safeCsvCell(value: unknown): string {
-  if (value == null) return '';
-  let text = typeof value === 'object' ? JSON.stringify(value) : String(value);
-  if (/^[=+\-@]/.test(text)) text = `'${text}`;
-  return `"${text.replaceAll('"', '""')}"`;
-}
-
-function buildCsv(groups: { name: string; rows: Record<string, unknown>[] }[], metadata?: Record<string, unknown>): string {
-  const flattened: Record<string, unknown>[] = groups.flatMap((group) => group.rows.map((row) => ({ dataset: group.name, ...row })));
-  const columns = Array.from(new Set(flattened.flatMap((row) => Object.keys(row))));
-  const body = [
-    columns.map(safeCsvCell).join(','),
-    ...flattened.map((row) => columns.map((column) => safeCsvCell(row[column])).join(',')),
-  ];
-  if (!metadata) return body.join('\r\n');
-  const comments = Object.entries(metadata).map(([key, value]) => `# ${key}: ${String(value)}`);
-  return [...comments, ...body].join('\r\n');
-}
+const mimeByFormat: Record<'csv' | 'json' | 'pdf', string> = {
+  csv: 'text/csv;charset=utf-8',
+  json: 'application/json;charset=utf-8',
+  pdf: 'application/pdf',
+};
 
 function downloadFile(contents: BlobPart, mime: string, filename: string) {
   const blob = contents instanceof Blob ? contents : new Blob([contents], { type: mime });
@@ -57,7 +44,6 @@ function downloadFile(contents: BlobPart, mime: string, filename: string) {
 
 export default function ExportPage() {
   const dateRange = useDashboardStore((s) => s.dateRange);
-  const selectedNetworkId = useDashboardStore((s) => s.selectedNetworkId);
   const [config, setConfig] = useState<ExportConfig>({
     format: 'csv',
     dateFrom: dateRange.from,
@@ -82,7 +68,7 @@ export default function ExportPage() {
       setError('Choose a valid date range.');
       return;
     }
-    if (config.format !== 'pdf' && !config.includeSST && !config.includeDHW && !config.includePredictions) {
+    if (!config.includeSST && !config.includeDHW && !config.includePredictions) {
       setError('Select at least one data layer.');
       return;
     }
@@ -92,49 +78,20 @@ export default function ExportPage() {
       const rangeStart = `${config.dateFrom}T00:00:00.000Z`;
       const rangeEnd = `${config.dateTo}T23:59:59.999Z`;
       const basename = `benthic-guardian-${config.dateFrom}-to-${config.dateTo}`;
+      const format = config.format as 'csv' | 'json' | 'pdf';
 
-      if (config.format === 'pdf') {
-        const blob = await downloadReportPdf({ start: rangeStart, end: rangeEnd });
-        downloadFile(blob, 'application/pdf', `${basename}.pdf`);
-        setMessage('Exported branded Benthic Guardian PDF from the API server.');
-        return;
-      }
-
-      const report = await generateReport({
+      const blob = await downloadReportFile({
         start: rangeStart,
         end: rangeEnd,
-        format: 'json',
+        format,
+        includeSST: config.includeSST,
+        includeDHW: config.includeDHW,
+        includePredictions: config.includePredictions,
+        includeMetadata: config.includeMetadata,
       });
 
-      const groups: { name: string; rows: Record<string, unknown>[] }[] = [];
-      if (config.includeSST) groups.push({ name: 'sst', rows: report.datasets.sst ?? [] });
-      if (config.includeDHW) groups.push({ name: 'dhw', rows: report.datasets.dhw ?? [] });
-      if (config.includePredictions) groups.push({ name: 'predictions', rows: report.datasets.predictions ?? [] });
-
-      const rowCount = groups.reduce((sum, group) => sum + group.rows.length, 0);
-      const metadata = config.includeMetadata
-        ? {
-            product: 'Benthic Guardian',
-            generated_at: report.metadata.generated_at ?? new Date().toISOString(),
-            generated_by: report.metadata.generated_by ?? '',
-            date_from: config.dateFrom,
-            date_to: config.dateTo,
-            selected_network_id: selectedNetworkId ?? 'all-visible-networks',
-            visible_networks: 'report-generated-from-api',
-            row_count: rowCount,
-          }
-        : undefined;
-
-      if (config.format === 'csv') {
-        downloadFile(buildCsv(groups, metadata), 'text/csv;charset=utf-8', `${basename}.csv`);
-      } else {
-        downloadFile(
-          JSON.stringify({ metadata, data: Object.fromEntries(groups.map((group) => [group.name, group.rows])) }, null, 2),
-          'application/json;charset=utf-8',
-          `${basename}.json`,
-        );
-      }
-      setMessage(`Exported ${rowCount.toLocaleString()} rows as ${config.format.toUpperCase()}.`);
+      downloadFile(blob, mimeByFormat[format], `${basename}.${format}`);
+      setMessage(`Exported ${format.toUpperCase()} from the Benthic Guardian API server.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Export failed.');
     } finally {
@@ -147,7 +104,7 @@ export default function ExportPage() {
       <div>
         <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Data Export Builder</h2>
         <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
-          CSV and JSON downloads contain live API data. PDF is generated on the backend with Benthic Guardian branding.
+          CSV, JSON, and PDF files are generated on the backend and downloaded securely.
         </p>
       </div>
 
@@ -192,24 +149,22 @@ export default function ExportPage() {
         </div>
       </section>
 
-      {config.format !== 'pdf' && (
-        <section className="rounded-xl border p-4" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-          <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Data layers</h3>
-          <div className="space-y-2">
-            {([
-              ['includeSST', 'Sea surface temperature (SST)'],
-              ['includeDHW', 'Degree heating weeks / heat-stress data'],
-              ['includePredictions', 'ML prediction results'],
-              ['includeMetadata', 'Account and network metadata'],
-            ] as const).map(([key, label]) => (
-              <label key={key} className="flex items-center gap-3 text-sm p-2 rounded hover:bg-[var(--bg-elevated)]" style={{ color: 'var(--text-primary)' }}>
-                <input type="checkbox" checked={config[key]} onChange={(event) => setConfig((current) => ({ ...current, [key]: event.target.checked }))} className="accent-[#00E5FF]" />
-                {label}
-              </label>
-            ))}
-          </div>
-        </section>
-      )}
+      <section className="rounded-xl border p-4" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+        <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Data layers</h3>
+        <div className="space-y-2">
+          {([
+            ['includeSST', 'Sea surface temperature (SST)'],
+            ['includeDHW', 'Degree heating weeks / heat-stress data'],
+            ['includePredictions', 'ML prediction results'],
+            ['includeMetadata', 'Account and network metadata'],
+          ] as const).map(([key, label]) => (
+            <label key={key} className="flex items-center gap-3 text-sm p-2 rounded hover:bg-[var(--bg-elevated)]" style={{ color: 'var(--text-primary)' }}>
+              <input type="checkbox" checked={config[key]} onChange={(event) => setConfig((current) => ({ ...current, [key]: event.target.checked }))} className="accent-[#00E5FF]" />
+              {label}
+            </label>
+          ))}
+        </div>
+      </section>
 
       <button type="button" disabled={exporting} onClick={() => void handleExport()} className="flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3 rounded-xl font-semibold text-sm disabled:opacity-50" style={{ background: 'var(--accent-cyan)', color: 'var(--bg-primary)' }}>
         <Download className="w-4 h-4" />
