@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import { tempToColor } from '@/lib/utils';
 import type { PredictionPoint, ForecastData } from '@/lib/types';
-import { getDHW, getLatestReadings, getLSTMForecast, getPredictions, getSST, mapLatestReadingRow } from '@/lib/api';
+import { getDHW, getLatestReadings, getLSTMForecast, getModelPerformance, getPredictions, getSST, mapLatestReadingRow, type ModelPerformance } from '@/lib/api';
 import { nearestAreaId } from '@/lib/geo';
 import { useMonitoringAreas } from '@/lib/useMonitoringAreas';
 import { subscribeDashboardDataRefresh } from '@/lib/data-refresh';
@@ -87,6 +87,8 @@ export default function PredictionsPage() {
   const [dhwData, setDhwData] = useState<{ week: string; dhw: number }[]>([]);
   const [zoneRisks, setZoneRisks] = useState<{ zone: string; risk: number }[]>([]);
   const [dataRefreshTick, setDataRefreshTick] = useState(0);
+  const [perf, setPerf] = useState<ModelPerformance | null>(null);
+  const [perfLoading, setPerfLoading] = useState(false);
 
   useEffect(() => {
     return subscribeDashboardDataRefresh(() => setDataRefreshTick((t) => t + 1));
@@ -259,6 +261,34 @@ export default function PredictionsPage() {
       cancelled = true;
     };
   }, [horizon, horizonDays, confidence, dataRefreshTick, model, runTick, selectedNetworkId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setPerfLoading(true);
+      try {
+        const metrics = await getModelPerformance(model);
+        if (!cancelled) setPerf(metrics);
+      } catch {
+        if (!cancelled) {
+          setPerf({
+            model,
+            mae: null,
+            rmse: null,
+            r2: null,
+            physics_loss: null,
+            n_pairs: 0,
+            message: 'Could not load model performance metrics.',
+          });
+        }
+      } finally {
+        if (!cancelled) setPerfLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [model, dataRefreshTick, runTick, selectedNetworkId]);
 
   useEffect(() => {
     setMounted(true);
@@ -646,14 +676,37 @@ export default function PredictionsPage() {
               Model Performance ({model})
             </h3>
             <p className="text-[11px] mb-3" style={{ color: 'var(--text-secondary)' }}>
-              Metrics below are placeholders until an evaluation endpoint is wired.
+              {perfLoading
+                ? 'Scoring forecasts against observed temperatures…'
+                : perf?.message
+                  ? perf.message
+                  : perf?.n_pairs
+                    ? `Scored on ${perf.n_pairs.toLocaleString()} prediction / observation pairs.`
+                    : 'Live metrics from the evaluation API.'}
             </p>
             <div className="grid grid-cols-2 gap-3 text-xs">
               {[
-                { label: 'MAE', value: '—' },
-                { label: 'RMSE', value: '—' },
-                { label: 'R²', value: '—' },
-                { label: 'Physics Loss', value: model === 'PINN' ? '—' : 'n/a' },
+                {
+                  label: 'MAE',
+                  value: perf?.mae == null ? '—' : perf.mae.toFixed(3),
+                },
+                {
+                  label: 'RMSE',
+                  value: perf?.rmse == null ? '—' : perf.rmse.toFixed(3),
+                },
+                {
+                  label: 'R²',
+                  value: perf?.r2 == null ? '—' : perf.r2.toFixed(3),
+                },
+                {
+                  label: 'Physics Loss',
+                  value:
+                    model === 'LSTM'
+                      ? 'n/a'
+                      : perf?.physics_loss == null
+                        ? '—'
+                        : perf.physics_loss.toFixed(4),
+                },
               ].map((m) => (
                 <div
                   key={m.label}
@@ -661,7 +714,7 @@ export default function PredictionsPage() {
                   style={{ background: 'var(--bg-elevated)' }}
                 >
                   <div className="font-mono text-lg font-bold" style={{ color: 'var(--accent-cyan)' }}>
-                    {m.value}
+                    {perfLoading ? '…' : m.value}
                   </div>
                   <div style={{ color: 'var(--text-secondary)' }}>{m.label}</div>
                 </div>
