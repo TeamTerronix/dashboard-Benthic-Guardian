@@ -123,6 +123,24 @@ export async function getTrainingHistory() {
   return fetchAPI('/api/training-history');
 }
 
+export interface ModelPerformance {
+  model: string;
+  mae: number | null;
+  rmse: number | null;
+  r2: number | null;
+  physics_loss: number | null;
+  n_pairs: number;
+  message?: string | null;
+  location?: string;
+}
+
+export async function getModelPerformance(
+  model: 'PINN' | 'LSTM' | 'Ensemble' = 'PINN',
+): Promise<ModelPerformance> {
+  const params = new URLSearchParams({ model });
+  return fetchAPI(`/api/model-performance?${params}`);
+}
+
 export async function getRiskSummary() {
   return fetchAPI('/api/risk-summary');
 }
