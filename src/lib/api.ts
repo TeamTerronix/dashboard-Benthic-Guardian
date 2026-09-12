@@ -167,6 +167,41 @@ export async function generateReport(params: {
   return fetchAPI(`/api/report?${query}`);
 }
 
+/** Download a server-generated branded PDF report (safer than client-side PDF build). */
+export async function downloadReportPdf(params: {
+  start?: string;
+  end?: string;
+} = {}): Promise<Blob> {
+  const query = new URLSearchParams();
+  if (params.start) query.set('start', params.start);
+  if (params.end) query.set('end', params.end);
+  query.set('format', 'pdf');
+
+  const headers: Record<string, string> = { Accept: 'application/pdf' };
+  if (typeof window !== 'undefined') {
+    const tok = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (tok) headers.Authorization = `Bearer ${tok}`;
+  }
+
+  const res = await fetch(`${API_BASE}/api/report?${query}`, { headers });
+  if (res.status === 401 && typeof window !== 'undefined') {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+  if (!res.ok) {
+    let detail = `API ${res.status} for /api/report (pdf)`;
+    try {
+      const j = await res.json();
+      if (j?.detail) detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail);
+    } catch {
+      // ignore
+    }
+    throw new Error(detail);
+  }
+  return res.blob();
+}
+
 export interface UserProfile {
   id: number;
   email: string;
